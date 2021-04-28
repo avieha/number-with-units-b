@@ -26,6 +26,10 @@ namespace ariel
         // function for reading the units from a given file
         static void read_units(ifstream &file);
 
+        static double convert(const double &val, const string &s,const string &t);
+
+        static void print_dict();
+
         /*** arithmetic operators ***/
         /****************************/
 
@@ -36,22 +40,22 @@ namespace ariel
         NumberWithUnits operator+(const NumberWithUnits &num1);
 
         // binary addition and save
-        NumberWithUnits& operator+=(ariel::NumberWithUnits& num2);
+        NumberWithUnits& operator+=(const NumberWithUnits& num2);
 
         // unary substraction
         NumberWithUnits operator-();
 
         // binary substraction
-        const NumberWithUnits operator-(const NumberWithUnits &num1) const;
+        NumberWithUnits operator-(const NumberWithUnits &num1);
 
         // binary substraction and save
-        const NumberWithUnits& operator-=(const NumberWithUnits &num1);
+        NumberWithUnits& operator-=(const NumberWithUnits &num1);
 
         /*** comparison operators ***/
         /****************************/
 
         // greater than operator
-        const bool operator>(const NumberWithUnits &num1) const;
+        bool operator>(const NumberWithUnits &num1) const;
         
         // greater than/equal operator
         bool operator>=(const NumberWithUnits &num1) const;
@@ -79,16 +83,16 @@ namespace ariel
         NumberWithUnits& operator--();
         
         // postfix addition
-        const NumberWithUnits& operator++(int);
+        NumberWithUnits operator++(int);
 
         // postfix substraction
-        const NumberWithUnits& operator--(const int n);
+        NumberWithUnits operator--(const int n);
 
         /***  multiplication operator ***/
         /********************************/
 
-        friend NumberWithUnits operator*(const NumberWithUnits& num,const double &x);
-        friend NumberWithUnits operator*(const double &x, const NumberWithUnits& num);
+        friend NumberWithUnits operator*(const NumberWithUnits &num1,const double x);
+        friend NumberWithUnits operator*(const double x, const NumberWithUnits &num2);
 
         /*** input and output operators ***/
         /**********************************/

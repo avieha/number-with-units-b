@@ -9,6 +9,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <ctype.h>
+#include <iterator>
+#include <map>
 #include "NumberWithUnits.hpp"
 
 using namespace std;
@@ -16,11 +18,16 @@ using namespace ariel;
 
 namespace ariel
 {
+    const double EPS = 0.001;
     static map<string, map<string, double>> dict;
 
     // constructor
     ariel::NumberWithUnits::NumberWithUnits(double number, const string &unit)
     {
+        if (dict.count(unit) == 0)
+        {
+            throw("type isn't known");
+        }
         this->number = number;
         this->unit = unit;
     }
@@ -36,58 +43,75 @@ namespace ariel
     // function for reading units from a file
     void NumberWithUnits::read_units(ifstream &file)
     {
-        string line;
-        while (file)
+        if (!file)
         {
-            getline(file, line);
-            string first_unit;
-            string second_unit;
-            string third_unit;
-            for (size_t i = 0; i < line.length(); i++)
+            throw "file is unreadable";
+        }
+        string first_unit;
+        string second_unit;
+        string temp;
+        double d1 = 0;
+        double d2 = 0;
+        while (file >> d1 >> first_unit >> temp >> d2 >> second_unit)
+        {
+            dict[first_unit][second_unit] = d2;
+            dict[second_unit][first_unit] = d1 / d2;
+
+            /** Example: **/
+            //"1 kg(first_unit) = 1000(d2) g(second_unit)"
+            //"1 ton(first_unit) = 1000(d2) kg(second_unit)"
+
+            /*** Update first_unit neighbors ***/
+            for (auto &itr : dict[first_unit])
             {
-                bool flag;
-                if (line.at(i) == ' ')
+                if (itr.first != second_unit && dict.at(second_unit).count(itr.first) == 0)
                 {
-                    continue;
-                }
-                if (isalpha(line.at(i)))
-                {
-                    if (!flag)
-                    {
-                        first_unit += line.at(i);
-                    }
-                    else
-                    {
-                        third_unit += line.at(i);
-                    }
-                }
-                if (isdigit(line.at(i)) && i != 0)
-                {
-                    flag = true;
-                    second_unit += line.at(i);
+                    double d3 = dict[first_unit][itr.first] * dict[second_unit][first_unit];
+                    dict[second_unit][itr.first] = d3;
+                    dict[itr.first][second_unit] = d1 / d3;
                 }
             }
-            dict[first_unit][third_unit] = stod(second_unit);
-            dict[third_unit][first_unit] = 1 / (stod(second_unit));
+
+            /*** Update second_unit neighbors ***/
+            for (auto &itr2 : dict[second_unit])
+            {
+                if (itr2.first != first_unit && dict.at(first_unit).count(itr2.first) == 0)
+                {
+                    double d3 = dict[second_unit][itr2.first] * dict[first_unit][second_unit];
+                    dict[first_unit][itr2.first] = d3;
+                    dict[itr2.first][first_unit] = d1 / d3;
+                }
+            }
         }
     };
 
-    bool check(const string &s, const string &t)
+    double NumberWithUnits::convert(const double &val, const string &s, const string &t)
     {
-        if (dict[s][t] != NULL)
-            return true;
-        throw "unconvertable addition";
-        return false;
+        if (s == t)
+        {
+            return val;
+        }
+        if (dict[t][s]==0)
+        {
+            throw "cant convert diff types!";
+        }
+        return val * dict[t][s];
     }
 
-    double convert(const double first, const double second, const string s,const string t){
-        if (dict[s][t])
+    void NumberWithUnits::print_dict()
+    {
+        map<string, map<string, double>>::iterator it;
+        map<string, double>::iterator it2;
+        for (it = dict.begin(); it != dict.end(); it++)
         {
-            double sum;
-            sum = first + dict[s][t] * second;
-            return sum;
+            cout << it->first << ":";
+            for (it2 = it->second.begin(); it2 != it->second.end(); it2++)
+            {
+                cout << " [" << it2->first << "]=" << it2->second;
+            }
+            cout << endl;
         }
-        return 0;
+        cout << endl;
     }
 
     /*** arithmetic operators ***/
@@ -102,76 +126,87 @@ namespace ariel
     // binary addition
     NumberWithUnits NumberWithUnits::operator+(const NumberWithUnits &num)
     {
-        double sum;
-        if (check(this->unit, num.unit))
-        {
-            sum = convert(this->number,num.number,this->unit, num.unit);
-        }
-        return NumberWithUnits{sum,this->unit};
+        double sum = 0;
+        sum = this->number + convert(num.number, this->unit, num.unit);
+        return NumberWithUnits{sum, this->unit};
     }
 
     // binary addition and save
     NumberWithUnits &NumberWithUnits::operator+=(const NumberWithUnits &num2)
     {
-        if (check(this->unit, num2.unit))
-        {
-            this->number = convert(this->number,num2.number,this->unit,num2.unit);
-        }
+        this->number += convert(num2.number, this->unit, num2.unit);
         return *this;
     }
 
     // unary substraction
-    NumberWithUnits NumberWithUnits::operator-() { 
-        this->number = (-1)*this->number;
-        return *this;
+    NumberWithUnits NumberWithUnits::operator-()
+    {
+        NumberWithUnits res(-this->number, this->unit);
+        return res;
     }
 
     // binary substraction
-    const NumberWithUnits NumberWithUnits::operator-(const NumberWithUnits &num1) const { return NumberWithUnits(0, "km"); }
+    NumberWithUnits NumberWithUnits::operator-(const NumberWithUnits &num1)
+    {
+        double sum = 0;
+        sum = this->number + convert(-num1.number, this->unit, num1.unit);
+        return NumberWithUnits{sum, this->unit};
+    }
 
     // binary substraction and save
-    const NumberWithUnits &NumberWithUnits::operator-=(const NumberWithUnits &num1)
+    NumberWithUnits &NumberWithUnits::operator-=(const NumberWithUnits &num1)
     {
-        return num1;
+        this->number -= convert(num1.number, this->unit, num1.unit);
+        return *this;
     }
 
     /*** comparison operators ***/
     /****************************/
 
     // greater than operator
-    const bool NumberWithUnits::operator>(const NumberWithUnits &num1) const
+    bool NumberWithUnits::operator>(const NumberWithUnits &num1) const
     {
-        return true;
+        double r = this->number - convert(num1.number, this->unit, num1.unit);
+        return r >= EPS;
     }
 
     // greater than/equal operator
     bool NumberWithUnits::operator>=(const NumberWithUnits &num1) const
     {
-        return true;
+        double r = this->number - convert(num1.number, this->unit, num1.unit);
+        return r >= -EPS;
     }
 
     // smaller than operator
     bool NumberWithUnits::operator<(const NumberWithUnits &num1) const
     {
-        return true;
+        double r = this->number - convert(num1.number, this->unit, num1.unit);
+        return r <= -EPS;
     }
 
     // smaller than/equal operator
     bool ariel::NumberWithUnits::operator<=(const NumberWithUnits &num1) const
     {
-        return true;
+        double r = this->number - convert(num1.number, this->unit, num1.unit);
+        return r <= EPS;
     }
 
     // equal operator
-    bool ariel::NumberWithUnits::operator==(const NumberWithUnits &num1) const
+    bool NumberWithUnits::operator==(const NumberWithUnits &num1) const
     {
-        return true;
+        double a = this->number;
+        double b = convert(num1.number, this->unit, num1.unit);
+        double sum = abs(a - b);
+        return sum >= 0 && sum <= EPS;
     }
 
     // not equal operator
     bool NumberWithUnits::operator!=(const NumberWithUnits &num1) const
     {
-        return true;
+        double a = this->number;
+        double b = convert(num1.number, this->unit, num1.unit);
+        double sum = a - b;
+        return sum < (-EPS) || sum > EPS;
     }
 
     /*** increasing and dicreasing operators ***/
@@ -180,59 +215,80 @@ namespace ariel
     // prefix addition
     NumberWithUnits &NumberWithUnits::operator++()
     {
+        this->number++;
         return *this;
     }
 
     // prefix substraction
     NumberWithUnits &NumberWithUnits::operator--()
     {
+        this->number--;
         return *this;
     }
 
     // postfix addition
-    const NumberWithUnits &NumberWithUnits::operator++(int)
+    NumberWithUnits NumberWithUnits::operator++(int)
     {
-        return *this;
+        return NumberWithUnits{(this->number)++, this->unit};
     }
 
     // postfix substraction
-    const NumberWithUnits &NumberWithUnits::operator--(const int n)
+    NumberWithUnits NumberWithUnits::operator--(const int n)
     {
-        return *this;
+        return NumberWithUnits{(this->number)--, this->unit};
     }
 
     /***  multiplication operator ***/
     /********************************/
 
-    NumberWithUnits operator*(const NumberWithUnits &num, const double &x)
+    NumberWithUnits operator*(const NumberWithUnits &num1, const double x)
     {
-        return num;
+        return NumberWithUnits(num1.number * x, num1.unit);
     }
 
-    NumberWithUnits operator*(const double &x, const NumberWithUnits &num)
+    NumberWithUnits operator*(const double x, const NumberWithUnits &num2)
     {
-        return num;
+        return NumberWithUnits(num2.number * x, num2.unit);
     }
 
     /*** input and output operators ***/
     /**********************************/
 
     // input operator
-    istream &operator>>(istream &is, NumberWithUnits &num)
+    istream &operator>>(istream &is, NumberWithUnits &num1)
     {
-        string s = "right";
-        is >> s;
+        double number = 0;
+        string unit;
+        char c = ' ';
+
+        is >> number;
+        is >> c;
+
+        while (c != ']')
+        {
+            if (c != '[')
+            {
+                unit += c;
+            }
+            is >> c;
+        }
+        if (dict[unit].empty())
+        {
+            throw "the unit doesnt exist";
+        }
+        num1.number = number;
+        num1.unit = unit;
         return is;
     }
 
     // output operator
     ostream &operator<<(ostream &os, const NumberWithUnits &num)
     {
-        double s = num.number;
-        os << s;
+        double d = num.number;
+        string s = num.unit;
+        os << d << "[" << s << "]";
         return os;
     }
 
     NumberWithUnits::~NumberWithUnits(){};
-
 }
